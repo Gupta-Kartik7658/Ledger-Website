@@ -33,11 +33,11 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/mern-ledg
   });
 
 // Routes
-app.use('/api/account-transactions', accountTransactionRoutes);
-app.use('/api/stock-transactions', stockTransactionRoutes);
-app.use('/api/account-names', accountNameRoutes);
-app.use('/api/item-names', itemNameRoutes);
-app.use('/api/dashboard', dashboardRoutes);
+app.use('/account-transactions', accountTransactionRoutes);
+app.use('/stock-transactions', stockTransactionRoutes);
+app.use('/account-names', accountNameRoutes);
+app.use('/item-names', itemNameRoutes);
+app.use('/dashboard', dashboardRoutes);
 
 // Root route
 app.get('/', (req, res) => {
