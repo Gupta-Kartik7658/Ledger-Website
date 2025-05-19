@@ -7,6 +7,8 @@ import { api } from '../utils/api';
 interface ItemName {
   _id: string;
   name: string;
+  initialStock: number;
+  currentStock: number;
   category?: string;
   unit?: string;
   description?: string;
@@ -22,6 +24,7 @@ const AddItemName: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentItemName, setCurrentItemName] = useState<Partial<ItemName>>({
     name: '',
+    initialStock: 0,
     category: '',
     unit: '',
     description: '',
@@ -42,6 +45,8 @@ const AddItemName: React.FC = () => {
           {
             _id: '1',
             name: 'Laptop',
+            initialStock: 50,
+            currentStock: 45,
             category: 'Electronics',
             unit: 'piece',
             description: 'Business laptops for office use',
@@ -50,18 +55,12 @@ const AddItemName: React.FC = () => {
           {
             _id: '2',
             name: 'Office Desk',
+            initialStock: 20,
+            currentStock: 18,
             category: 'Furniture',
             unit: 'piece',
             description: 'Standard office desks',
             sku: 'DESK-001'
-          },
-          {
-            _id: '3',
-            name: 'Printer Paper',
-            category: 'Office Supplies',
-            unit: 'ream',
-            description: 'A4 printer paper, 500 sheets per ream',
-            sku: 'PAP-001'
           }
         ]);
       } finally {
@@ -76,6 +75,7 @@ const AddItemName: React.FC = () => {
     setIsEditing(false);
     setCurrentItemName({
       name: '',
+      initialStock: 0,
       category: '',
       unit: '',
       description: '',
@@ -94,11 +94,11 @@ const AddItemName: React.FC = () => {
     setIsModalOpen(false);
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setCurrentItemName(prev => ({
       ...prev,
-      [name]: value
+      [name]: name === 'initialStock' ? parseInt(value) || 0 : value
     }));
   };
 
@@ -107,20 +107,16 @@ const AddItemName: React.FC = () => {
     
     try {
       if (isEditing && currentItemName._id) {
-        // Update existing item name
         await api.put(`/item-names/${currentItemName._id}`, currentItemName);
       } else {
-        // Create new item name
         await api.post('/item-names', currentItemName);
       }
       
-      // Refresh data
       const response = await api.get('/item-names/details');
       setItemNames(response.data);
       closeModal();
     } catch (err) {
       console.error('Failed to save item name:', err);
-      // For demo, simulate successful save without API
       if (isEditing) {
         const updatedItemNames = itemNames.map(item => 
           item._id === currentItemName._id ? { ...currentItemName as ItemName } : item
@@ -130,6 +126,7 @@ const AddItemName: React.FC = () => {
         const newItemName = {
           ...currentItemName,
           _id: Date.now().toString(),
+          currentStock: currentItemName.initialStock || 0
         } as ItemName;
         setItemNames([...itemNames, newItemName]);
       }
@@ -144,17 +141,13 @@ const AddItemName: React.FC = () => {
     
     try {
       await api.delete(`/item-names/${id}`);
-      
-      // Update state after successful deletion
       setItemNames(itemNames.filter(item => item._id !== id));
     } catch (err) {
       console.error('Failed to delete item name:', err);
-      // For demo, simulate successful deletion without API
       setItemNames(itemNames.filter(item => item._id !== id));
     }
   };
 
-  // Filter item names based on search query
   const filteredItemNames = itemNames.filter(item =>
     item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (item.category && item.category.toLowerCase().includes(searchQuery.toLowerCase())) ||
@@ -162,7 +155,6 @@ const AddItemName: React.FC = () => {
     (item.sku && item.sku.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  // Group items by category
   const groupedItems: Record<string, ItemName[]> = {};
   filteredItemNames.forEach(item => {
     const category = item.category || 'Uncategorized';
@@ -189,7 +181,6 @@ const AddItemName: React.FC = () => {
         }
       />
 
-      {/* Search */}
       <div className="mb-6">
         <div className="mt-1 relative rounded-md shadow-sm">
           <input
@@ -256,7 +247,17 @@ const AddItemName: React.FC = () => {
                               <div className="text-sm text-gray-500">Unit: {item.unit}</div>
                             )}
                           </div>
-                          <div className="flex space-x-4">
+                          <div className="flex items-center space-x-4">
+                            <div className="text-right">
+                              <div className="text-sm font-medium text-gray-900">
+                                Current Stock: <span className={item.currentStock > 0 ? 'text-green-600' : 'text-red-600'}>
+                                  {item.currentStock}
+                                </span>
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                Initial Stock: {item.initialStock}
+                              </div>
+                            </div>
                             <ActionButtons
                               onEdit={() => openEditModal(item)}
                               onDelete={() => handleDelete(item._id)}
@@ -279,7 +280,6 @@ const AddItemName: React.FC = () => {
         </>
       )}
 
-      {/* Add/Edit Item Name Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 overflow-y-auto z-50 flex items-center justify-center">
           <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onClick={closeModal}></div>
@@ -312,6 +312,22 @@ const AddItemName: React.FC = () => {
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                     placeholder="Item name"
                     value={currentItemName.name || ''}
+                    onChange={handleInputChange}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="initialStock" className="block text-sm font-medium text-gray-700">
+                    Initial Stock
+                  </label>
+                  <input
+                    type="number"
+                    name="initialStock"
+                    id="initialStock"
+                    min="0"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    placeholder="0"
+                    value={currentItemName.initialStock || 0}
                     onChange={handleInputChange}
                   />
                 </div>

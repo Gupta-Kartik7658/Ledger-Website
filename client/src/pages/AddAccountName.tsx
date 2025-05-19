@@ -7,6 +7,8 @@ import { api } from '../utils/api';
 interface AccountName {
   _id: string;
   name: string;
+  initialBalance: number;
+  currentBalance: number;
   contactPerson?: string;
   email?: string;
   phone?: string;
@@ -22,6 +24,7 @@ const AddAccountName: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentAccountName, setCurrentAccountName] = useState<Partial<AccountName>>({
     name: '',
+    initialBalance: 0,
     contactPerson: '',
     email: '',
     phone: '',
@@ -42,6 +45,8 @@ const AddAccountName: React.FC = () => {
           {
             _id: '1',
             name: 'ABC Company',
+            initialBalance: 10000,
+            currentBalance: 15000,
             contactPerson: 'John Smith',
             email: 'john@abccompany.com',
             phone: '555-123-4567',
@@ -50,18 +55,12 @@ const AddAccountName: React.FC = () => {
           {
             _id: '2',
             name: 'XYZ Suppliers',
+            initialBalance: -5000,
+            currentBalance: -2500,
             contactPerson: 'Jane Doe',
             email: 'jane@xyzsuppliers.com',
             phone: '555-987-6543',
             address: '456 Vendor Ave, Town, State'
-          },
-          {
-            _id: '3',
-            name: 'Acme Inc',
-            contactPerson: 'Robert Johnson',
-            email: 'robert@acmeinc.com',
-            phone: '555-456-7890',
-            address: '789 Corporate Blvd, City, State'
           }
         ]);
       } finally {
@@ -76,6 +75,7 @@ const AddAccountName: React.FC = () => {
     setIsEditing(false);
     setCurrentAccountName({
       name: '',
+      initialBalance: 0,
       contactPerson: '',
       email: '',
       phone: '',
@@ -98,7 +98,7 @@ const AddAccountName: React.FC = () => {
     const { name, value } = e.target;
     setCurrentAccountName(prev => ({
       ...prev,
-      [name]: value
+      [name]: name === 'initialBalance' ? parseFloat(value) || 0 : value
     }));
   };
 
@@ -107,20 +107,16 @@ const AddAccountName: React.FC = () => {
     
     try {
       if (isEditing && currentAccountName._id) {
-        // Update existing account name
         await api.put(`/account-names/${currentAccountName._id}`, currentAccountName);
       } else {
-        // Create new account name
         await api.post('/account-names', currentAccountName);
       }
       
-      // Refresh data
       const response = await api.get('/account-names/details');
       setAccountNames(response.data);
       closeModal();
     } catch (err) {
       console.error('Failed to save account name:', err);
-      // For demo, simulate successful save without API
       if (isEditing) {
         const updatedAccountNames = accountNames.map(account => 
           account._id === currentAccountName._id ? { ...currentAccountName as AccountName } : account
@@ -130,6 +126,7 @@ const AddAccountName: React.FC = () => {
         const newAccountName = {
           ...currentAccountName,
           _id: Date.now().toString(),
+          currentBalance: currentAccountName.initialBalance || 0
         } as AccountName;
         setAccountNames([...accountNames, newAccountName]);
       }
@@ -144,22 +141,22 @@ const AddAccountName: React.FC = () => {
     
     try {
       await api.delete(`/account-names/${id}`);
-      
-      // Update state after successful deletion
       setAccountNames(accountNames.filter(account => account._id !== id));
     } catch (err) {
       console.error('Failed to delete account name:', err);
-      // For demo, simulate successful deletion without API
       setAccountNames(accountNames.filter(account => account._id !== id));
     }
   };
 
-  // Filter account names based on search query
   const filteredAccountNames = accountNames.filter(account =>
     account.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (account.contactPerson && account.contactPerson.toLowerCase().includes(searchQuery.toLowerCase())) ||
     (account.email && account.email.toLowerCase().includes(searchQuery.toLowerCase()))
   );
+
+  const formatCurrency = (amount: number) => {
+    return `₹${Math.abs(amount).toLocaleString('en-IN')}`;
+  };
 
   return (
     <div className="py-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -178,7 +175,6 @@ const AddAccountName: React.FC = () => {
         }
       />
 
-      {/* Search */}
       <div className="mb-6">
         <div className="mt-1 relative rounded-md shadow-sm">
           <input
@@ -233,7 +229,17 @@ const AddAccountName: React.FC = () => {
                           <div className="text-sm text-gray-500">Contact: {account.contactPerson}</div>
                         )}
                       </div>
-                      <div className="flex space-x-4">
+                      <div className="flex items-center space-x-4">
+                        <div className="text-right">
+                          <div className="text-sm font-medium text-gray-900">
+                            Current Balance: <span className={account.currentBalance >= 0 ? 'text-green-600' : 'text-red-600'}>
+                              {formatCurrency(account.currentBalance)}
+                            </span>
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            Initial Balance: {formatCurrency(account.initialBalance)}
+                          </div>
+                        </div>
                         <ActionButtons
                           onEdit={() => openEditModal(account)}
                           onDelete={() => handleDelete(account._id)}
@@ -275,7 +281,6 @@ const AddAccountName: React.FC = () => {
         </>
       )}
 
-      {/* Add/Edit Account Name Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 overflow-y-auto z-50 flex items-center justify-center">
           <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onClick={closeModal}></div>
@@ -310,6 +315,27 @@ const AddAccountName: React.FC = () => {
                     value={currentAccountName.name || ''}
                     onChange={handleInputChange}
                   />
+                </div>
+
+                <div>
+                  <label htmlFor="initialBalance" className="block text-sm font-medium text-gray-700">
+                    Initial Balance
+                  </label>
+                  <div className="mt-1 relative rounded-md shadow-sm">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <span className="text-gray-500 sm:text-sm">₹</span>
+                    </div>
+                    <input
+                      type="number"
+                      name="initialBalance"
+                      id="initialBalance"
+                      step="0.01"
+                      className="block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+                      placeholder="0.00"
+                      value={currentAccountName.initialBalance || 0}
+                      onChange={handleInputChange}
+                    />
+                  </div>
                 </div>
                 
                 <div>
