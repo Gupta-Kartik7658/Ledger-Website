@@ -21,6 +21,10 @@ const accountTransactionSchema = new mongoose.Schema({
     required: true,
     min: 0
   },
+  balanceAfterTransaction: {
+    type: Number,
+    required: true
+  },
   description: {
     type: String,
     trim: true

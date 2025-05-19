@@ -1,5 +1,6 @@
 import express from 'express';
 import StockTransaction from '../models/StockTransaction.js';
+import ItemName from '../models/ItemName.js';
 
 const router = express.Router();
 
@@ -28,57 +29,150 @@ router.get('/:id', async (req, res) => {
 
 // Create a new stock transaction
 router.post('/', async (req, res) => {
-  const transaction = new StockTransaction({
-    date: req.body.date,
-    itemName: req.body.itemName,
-    transactionType: req.body.transactionType,
-    quantity: req.body.quantity,
-    unitPrice: req.body.unitPrice,
-    description: req.body.description
-  });
+  const session = await StockTransaction.startSession();
+  session.startTransaction();
 
   try {
-    const newTransaction = await transaction.save();
-    res.status(201).json(newTransaction);
+    const { itemName, transactionType, quantity } = req.body;
+    
+    // Find the item and update its stock
+    const item = await ItemName.findOne({ name: itemName });
+    if (!item) {
+      throw new Error('Item not found');
+    }
+
+    // Calculate new stock level
+    const stockChange = transactionType === 'In' ? quantity : -quantity;
+    const newStock = item.currentStock + stockChange;
+
+    if (newStock < 0) {
+      throw new Error('Insufficient stock');
+    }
+
+    // Create transaction with new stock level
+    const transaction = new StockTransaction({
+      ...req.body,
+      stockAfterTransaction: newStock
+    });
+
+    // Update item stock
+    item.currentStock = newStock;
+
+    // Save both transaction and updated item
+    await Promise.all([
+      transaction.save({ session }),
+      item.save({ session })
+    ]);
+
+    await session.commitTransaction();
+    res.status(201).json(transaction);
   } catch (err) {
+    await session.abortTransaction();
     res.status(400).json({ message: err.message });
+  } finally {
+    session.endSession();
   }
 });
 
 // Update a stock transaction
 router.put('/:id', async (req, res) => {
+  const session = await StockTransaction.startSession();
+  session.startTransaction();
+
   try {
-    const transaction = await StockTransaction.findById(req.params.id);
-    if (!transaction) {
+    const oldTransaction = await StockTransaction.findById(req.params.id);
+    if (!oldTransaction) {
       return res.status(404).json({ message: 'Transaction not found' });
     }
 
-    if (req.body.date) transaction.date = req.body.date;
-    if (req.body.itemName) transaction.itemName = req.body.itemName;
-    if (req.body.transactionType) transaction.transactionType = req.body.transactionType;
-    if (req.body.quantity) transaction.quantity = req.body.quantity;
-    if (req.body.unitPrice) transaction.unitPrice = req.body.unitPrice;
-    if (req.body.description !== undefined) transaction.description = req.body.description;
+    const item = await ItemName.findOne({ name: oldTransaction.itemName });
+    if (!item) {
+      throw new Error('Item not found');
+    }
 
-    const updatedTransaction = await transaction.save();
-    res.json(updatedTransaction);
+    // Reverse the old transaction's effect on stock
+    const oldStockChange = oldTransaction.transactionType === 'In'
+      ? -oldTransaction.quantity
+      : oldTransaction.quantity;
+    
+    // Calculate new transaction's effect
+    const newStockChange = req.body.transactionType === 'In'
+      ? req.body.quantity
+      : -req.body.quantity;
+
+    // Update item stock
+    const newStock = item.currentStock + oldStockChange + newStockChange;
+
+    if (newStock < 0) {
+      throw new Error('Insufficient stock');
+    }
+
+    item.currentStock = newStock;
+
+    // Update transaction
+    const updatedTransaction = {
+      ...req.body,
+      stockAfterTransaction: newStock
+    };
+
+    const result = await StockTransaction.findByIdAndUpdate(
+      req.params.id,
+      updatedTransaction,
+      { new: true, session }
+    );
+
+    await item.save({ session });
+    await session.commitTransaction();
+    res.json(result);
   } catch (err) {
+    await session.abortTransaction();
     res.status(400).json({ message: err.message });
+  } finally {
+    session.endSession();
   }
 });
 
 // Delete a stock transaction
 router.delete('/:id', async (req, res) => {
+  const session = await StockTransaction.startSession();
+  session.startTransaction();
+
   try {
     const transaction = await StockTransaction.findById(req.params.id);
     if (!transaction) {
       return res.status(404).json({ message: 'Transaction not found' });
     }
 
-    await StockTransaction.findByIdAndDelete(req.params.id);
+    const item = await ItemName.findOne({ name: transaction.itemName });
+    if (!item) {
+      throw new Error('Item not found');
+    }
+
+    // Reverse the transaction's effect on stock
+    const stockChange = transaction.transactionType === 'In'
+      ? -transaction.quantity
+      : transaction.quantity;
+    
+    const newStock = item.currentStock + stockChange;
+    
+    if (newStock < 0) {
+      throw new Error('Cannot delete transaction: would result in negative stock');
+    }
+
+    item.currentStock = newStock;
+
+    await Promise.all([
+      StockTransaction.findByIdAndDelete(req.params.id, { session }),
+      item.save({ session })
+    ]);
+
+    await session.commitTransaction();
     res.json({ message: 'Transaction deleted' });
   } catch (err) {
+    await session.abortTransaction();
     res.status(500).json({ message: err.message });
+  } finally {
+    session.endSession();
   }
 });
 

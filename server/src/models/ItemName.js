@@ -7,6 +7,16 @@ const itemNameSchema = new mongoose.Schema({
     trim: true,
     unique: true
   },
+  initialStock: {
+    type: Number,
+    required: true,
+    default: 0
+  },
+  currentStock: {
+    type: Number,
+    required: true,
+    default: 0
+  },
   category: {
     type: String,
     trim: true

@@ -1,5 +1,6 @@
 import express from 'express';
 import AccountTransaction from '../models/AccountTransaction.js';
+import AccountName from '../models/AccountName.js';
 
 const router = express.Router();
 
@@ -28,55 +29,134 @@ router.get('/:id', async (req, res) => {
 
 // Create a new account transaction
 router.post('/', async (req, res) => {
-  const transaction = new AccountTransaction({
-    date: req.body.date,
-    accountName: req.body.accountName,
-    transactionType: req.body.transactionType,
-    amount: req.body.amount,
-    description: req.body.description
-  });
+  const session = await AccountTransaction.startSession();
+  session.startTransaction();
 
   try {
-    const newTransaction = await transaction.save();
-    res.status(201).json(newTransaction);
+    const { accountName, transactionType, amount } = req.body;
+    
+    // Find the account and update its balance
+    const account = await AccountName.findOne({ name: accountName });
+    if (!account) {
+      throw new Error('Account not found');
+    }
+
+    // Calculate new balance
+    const balanceChange = transactionType === 'Credit' ? amount : -amount;
+    const newBalance = account.currentBalance + balanceChange;
+
+    // Create transaction with new balance
+    const transaction = new AccountTransaction({
+      ...req.body,
+      balanceAfterTransaction: newBalance
+    });
+
+    // Update account balance
+    account.currentBalance = newBalance;
+
+    // Save both transaction and updated account
+    await Promise.all([
+      transaction.save({ session }),
+      account.save({ session })
+    ]);
+
+    await session.commitTransaction();
+    res.status(201).json(transaction);
   } catch (err) {
+    await session.abortTransaction();
     res.status(400).json({ message: err.message });
+  } finally {
+    session.endSession();
   }
 });
 
 // Update an account transaction
 router.put('/:id', async (req, res) => {
+  const session = await AccountTransaction.startSession();
+  session.startTransaction();
+
   try {
-    const transaction = await AccountTransaction.findById(req.params.id);
-    if (!transaction) {
+    const oldTransaction = await AccountTransaction.findById(req.params.id);
+    if (!oldTransaction) {
       return res.status(404).json({ message: 'Transaction not found' });
     }
 
-    if (req.body.date) transaction.date = req.body.date;
-    if (req.body.accountName) transaction.accountName = req.body.accountName;
-    if (req.body.transactionType) transaction.transactionType = req.body.transactionType;
-    if (req.body.amount) transaction.amount = req.body.amount;
-    if (req.body.description !== undefined) transaction.description = req.body.description;
+    const account = await AccountName.findOne({ name: oldTransaction.accountName });
+    if (!account) {
+      throw new Error('Account not found');
+    }
 
-    const updatedTransaction = await transaction.save();
-    res.json(updatedTransaction);
+    // Reverse the old transaction's effect on balance
+    const oldBalanceChange = oldTransaction.transactionType === 'Credit' 
+      ? -oldTransaction.amount 
+      : oldTransaction.amount;
+    
+    // Calculate new transaction's effect
+    const newBalanceChange = req.body.transactionType === 'Credit'
+      ? req.body.amount
+      : -req.body.amount;
+
+    // Update account balance
+    account.currentBalance = account.currentBalance + oldBalanceChange + newBalanceChange;
+
+    // Update transaction
+    const updatedTransaction = {
+      ...req.body,
+      balanceAfterTransaction: account.currentBalance
+    };
+
+    const result = await AccountTransaction.findByIdAndUpdate(
+      req.params.id,
+      updatedTransaction,
+      { new: true, session }
+    );
+
+    await account.save({ session });
+    await session.commitTransaction();
+    res.json(result);
   } catch (err) {
+    await session.abortTransaction();
     res.status(400).json({ message: err.message });
+  } finally {
+    session.endSession();
   }
 });
 
 // Delete an account transaction
 router.delete('/:id', async (req, res) => {
+  const session = await AccountTransaction.startSession();
+  session.startTransaction();
+
   try {
     const transaction = await AccountTransaction.findById(req.params.id);
     if (!transaction) {
       return res.status(404).json({ message: 'Transaction not found' });
     }
 
-    await AccountTransaction.findByIdAndDelete(req.params.id);
+    const account = await AccountName.findOne({ name: transaction.accountName });
+    if (!account) {
+      throw new Error('Account not found');
+    }
+
+    // Reverse the transaction's effect on balance
+    const balanceChange = transaction.transactionType === 'Credit'
+      ? -transaction.amount
+      : transaction.amount;
+    
+    account.currentBalance += balanceChange;
+
+    await Promise.all([
+      AccountTransaction.findByIdAndDelete(req.params.id, { session }),
+      account.save({ session })
+    ]);
+
+    await session.commitTransaction();
     res.json({ message: 'Transaction deleted' });
   } catch (err) {
+    await session.abortTransaction();
     res.status(500).json({ message: err.message });
+  } finally {
+    session.endSession();
   }
 });
 

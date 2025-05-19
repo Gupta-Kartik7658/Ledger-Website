@@ -7,6 +7,16 @@ const accountNameSchema = new mongoose.Schema({
     trim: true,
     unique: true
   },
+  initialBalance: {
+    type: Number,
+    required: true,
+    default: 0
+  },
+  currentBalance: {
+    type: Number,
+    required: true,
+    default: 0
+  },
   contactPerson: {
     type: String,
     trim: true
