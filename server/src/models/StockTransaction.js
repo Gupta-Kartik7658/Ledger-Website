@@ -21,6 +21,10 @@ const stockTransactionSchema = new mongoose.Schema({
     required: true,
     min: 0
   },
+  stockAfterTransaction: {
+    type: Number,
+    required: true
+  },
   unitPrice: {
     type: Number,
     required: true,
