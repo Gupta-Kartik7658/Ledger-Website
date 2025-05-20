@@ -14,6 +14,7 @@ interface AccountTransaction {
   accountName: string;
   transactionType: string;
   amount: number;
+  balanceAfterTransaction: number;
   description: string;
 }
 
@@ -39,7 +40,6 @@ const AccountLedger: React.FC = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        // Fetch transactions
         const [transactionsResponse, accountNamesResponse] = await Promise.all([
           api.get('/account-transactions'),
           api.get('/account-names')
@@ -59,6 +59,7 @@ const AccountLedger: React.FC = () => {
             accountName: 'ABC Company',
             transactionType: 'Credit',
             amount: 5000,
+            balanceAfterTransaction: 15000,
             description: 'Payment received'
           },
           {
@@ -67,15 +68,8 @@ const AccountLedger: React.FC = () => {
             accountName: 'XYZ Suppliers',
             transactionType: 'Debit',
             amount: 2500,
+            balanceAfterTransaction: -2500,
             description: 'Payment made'
-          },
-          {
-            _id: '3',
-            date: '2023-11-12',
-            accountName: 'John Doe',
-            transactionType: 'Credit',
-            amount: 1200,
-            description: 'Consulting fee'
           }
         ];
         setTransactions(mockTransactions);
@@ -189,36 +183,17 @@ const AccountLedger: React.FC = () => {
     
     try {
       if (isEditing && currentTransaction._id) {
-        // Update existing transaction
         await api.put(`/account-transactions/${currentTransaction._id}`, currentTransaction);
       } else {
-        // Create new transaction
         await api.post('/account-transactions', currentTransaction);
       }
       
-      // Refresh data
       const response = await api.get('/account-transactions');
       setTransactions(response.data);
       setFilteredTransactions(response.data);
       closeModal();
     } catch (err) {
       console.error('Failed to save transaction:', err);
-      // For demo, simulate successful save without API
-      if (isEditing) {
-        const updatedTransactions = transactions.map(t => 
-          t._id === currentTransaction._id ? { ...currentTransaction as AccountTransaction } : t
-        );
-        setTransactions(updatedTransactions);
-        setFilteredTransactions(updatedTransactions);
-      } else {
-        const newTransaction = {
-          ...currentTransaction,
-          _id: Date.now().toString(),
-        } as AccountTransaction;
-        const updatedTransactions = [...transactions, newTransaction];
-        setTransactions(updatedTransactions);
-        setFilteredTransactions(updatedTransactions);
-      }
       closeModal();
     }
   };
@@ -230,17 +205,11 @@ const AccountLedger: React.FC = () => {
     
     try {
       await api.delete(`/account-transactions/${id}`);
-      
-      // Update state after successful deletion
-      const updatedTransactions = transactions.filter(t => t._id !== id);
-      setTransactions(updatedTransactions);
-      setFilteredTransactions(updatedTransactions);
+      const response = await api.get('/account-transactions');
+      setTransactions(response.data);
+      setFilteredTransactions(response.data);
     } catch (err) {
       console.error('Failed to delete transaction:', err);
-      // For demo, simulate successful deletion without API
-      const updatedTransactions = transactions.filter(t => t._id !== id);
-      setTransactions(updatedTransactions);
-      setFilteredTransactions(updatedTransactions);
     }
   };
 
@@ -252,10 +221,15 @@ const AccountLedger: React.FC = () => {
         { header: 'Account Name', key: 'accountName', width: 30 },
         { header: 'Type', key: 'transactionType', width: 10 },
         { header: 'Amount', key: 'amount', width: 15 },
+        { header: 'Balance After', key: 'balanceAfterTransaction', width: 15 },
         { header: 'Description', key: 'description', width: 40 }
       ],
       'Account_Ledger'
     );
+  };
+
+  const formatCurrency = (amount: number) => {
+    return `₹${Math.abs(amount).toLocaleString('en-IN')}`;
   };
 
   return (
@@ -311,6 +285,7 @@ const AccountLedger: React.FC = () => {
                 <th scope="col">Account Name</th>
                 <th scope="col">Type</th>
                 <th scope="col">Amount</th>
+                <th scope="col">Balance After</th>
                 <th scope="col">Description</th>
                 <th scope="col">Actions</th>
               </tr>
@@ -318,7 +293,7 @@ const AccountLedger: React.FC = () => {
             <tbody>
               {filteredTransactions.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-6">No transactions found</td>
+                  <td colSpan={7} className="text-center py-6">No transactions found</td>
                 </tr>
               ) : (
                 filteredTransactions.map((transaction) => (
@@ -337,10 +312,12 @@ const AccountLedger: React.FC = () => {
                       </span>
                     </td>
                     <td className="font-medium">
-                      ${transaction.amount.toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
+                      {formatCurrency(transaction.amount)}
+                    </td>
+                    <td className={`font-medium ${
+                      transaction.balanceAfterTransaction >= 0 ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {formatCurrency(transaction.balanceAfterTransaction)}
                     </td>
                     <td className="truncate max-w-xs">{transaction.description}</td>
                     <td>
@@ -433,7 +410,7 @@ const AccountLedger: React.FC = () => {
                   </label>
                   <div className="mt-1 relative rounded-md shadow-sm">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <span className="text-gray-500 sm:text-sm">$</span>
+                      <span className="text-gray-500 sm:text-sm">₹</span>
                     </div>
                     <input
                       type="number"
