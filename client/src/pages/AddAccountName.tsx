@@ -40,7 +40,6 @@ const AddAccountName: React.FC = () => {
       } catch (err) {
         setError('Failed to load account names');
         console.error(err);
-        // Mock data for demonstration
         setAccountNames([
           {
             _id: '1',
@@ -109,7 +108,10 @@ const AddAccountName: React.FC = () => {
       if (isEditing && currentAccountName._id) {
         await api.put(`/account-names/${currentAccountName._id}`, currentAccountName);
       } else {
-        await api.post('/account-names', currentAccountName);
+        await api.post('/account-names', {
+          ...currentAccountName,
+          currentBalance: currentAccountName.initialBalance || 0
+        });
       }
       
       const response = await api.get('/account-names/details');
@@ -117,19 +119,6 @@ const AddAccountName: React.FC = () => {
       closeModal();
     } catch (err) {
       console.error('Failed to save account name:', err);
-      if (isEditing) {
-        const updatedAccountNames = accountNames.map(account => 
-          account._id === currentAccountName._id ? { ...currentAccountName as AccountName } : account
-        );
-        setAccountNames(updatedAccountNames);
-      } else {
-        const newAccountName = {
-          ...currentAccountName,
-          _id: Date.now().toString(),
-          currentBalance: currentAccountName.initialBalance || 0
-        } as AccountName;
-        setAccountNames([...accountNames, newAccountName]);
-      }
       closeModal();
     }
   };
@@ -141,10 +130,10 @@ const AddAccountName: React.FC = () => {
     
     try {
       await api.delete(`/account-names/${id}`);
-      setAccountNames(accountNames.filter(account => account._id !== id));
+      const response = await api.get('/account-names/details');
+      setAccountNames(response.data);
     } catch (err) {
       console.error('Failed to delete account name:', err);
-      setAccountNames(accountNames.filter(account => account._id !== id));
     }
   };
 
@@ -326,10 +315,9 @@ const AddAccountName: React.FC = () => {
                       <span className="text-gray-500 sm:text-sm">₹</span>
                     </div>
                     <input
-                      type="number"
+                      type="text"
                       name="initialBalance"
                       id="initialBalance"
-                      step="0.01"
                       className="block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
                       placeholder="0.00"
                       value={currentAccountName.initialBalance || 0}

@@ -41,8 +41,8 @@ router.post('/', async (req, res) => {
       throw new Error('Account not found');
     }
 
-    // Calculate new balance
-    const balanceChange = transactionType === 'Credit' ? amount : -amount;
+    // Calculate new balance - Credit decreases balance, Debit increases balance
+    const balanceChange = transactionType === 'Credit' ? -amount : amount;
     const newBalance = account.currentBalance + balanceChange;
 
     // Create transaction with new balance
@@ -88,13 +88,13 @@ router.put('/:id', async (req, res) => {
 
     // Reverse the old transaction's effect on balance
     const oldBalanceChange = oldTransaction.transactionType === 'Credit' 
-      ? -oldTransaction.amount 
-      : oldTransaction.amount;
+      ? oldTransaction.amount 
+      : -oldTransaction.amount;
     
     // Calculate new transaction's effect
     const newBalanceChange = req.body.transactionType === 'Credit'
-      ? req.body.amount
-      : -req.body.amount;
+      ? -req.body.amount
+      : req.body.amount;
 
     // Update account balance
     account.currentBalance = account.currentBalance + oldBalanceChange + newBalanceChange;
@@ -140,8 +140,8 @@ router.delete('/:id', async (req, res) => {
 
     // Reverse the transaction's effect on balance
     const balanceChange = transaction.transactionType === 'Credit'
-      ? -transaction.amount
-      : transaction.amount;
+      ? transaction.amount
+      : -transaction.amount;
     
     account.currentBalance += balanceChange;
 
